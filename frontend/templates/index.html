@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1 class="mb-4">Task Manager</h1>
+    
+    {% if messages %}
+    <div class="messages">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>Create New Task</h5>
+        </div>
+        <div class="card-body">
+            <form id="taskForm" method="post" action="{% url 'create_task' %}">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="taskName" class="form-label">Task Name</label>
+                    <input type="text" class="form-control" id="taskName" name="taskName" required>
+                </div>
+                <div class="mb-3">
+                    <label for="taskDescription" class="form-label">Description</label>
+                    <textarea class="form-control" id="taskDescription" name="taskDescription" rows="2"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="taskType" class="form-label">Task Type</label>
+                    <select class="form-control" id="taskType" name="taskType" required>
+                        <option value="data_processing">Data Processing</option>
+                        <option value="report_generation">Report Generation</option>
+                        <option value="video_processing">Video Processing</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="taskParameters" class="form-label">Parameters (JSON)</label>
+                    <textarea class="form-control" id="taskParameters" name="taskParameters" rows="3" placeholder='{"key": "value"}'></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Create Task</button>
+            </form>
+        </div>
+    </div>
+    
+    <h3>Tasks</h3>
+    <div class="row" id="taskList">
+        {% if tasks %}
+            {% for task in tasks %}
+                <div class="col-md-6">
+                    <div class="card task-card" data-task-id="{{ task.id }}">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">{{ task.name }}</h5>
+                            <span class="badge 
+                                {% if task.status == 'PENDING' %}bg-secondary
+                                {% elif task.status == 'RUNNING' %}bg-primary
+                                {% elif task.status == 'COMPLETED' %}bg-success
+                                {% elif task.status == 'FAILED' %}bg-danger
+                                {% else %}bg-secondary{% endif %}">
+                                {{ task.status }}
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <p class="card-text">{{ task.description|default:"No description" }}</p>
+                            <p><strong>Task Type:</strong> {{ task.task_type }}</p>
+                            <div class="progress mb-3">
+                                <div class="progress-bar" role="progressbar" {% if task.progress %}style="width: {{ task.progress }}%;"{% else %}style="width: 0%;"{% endif %}                                    aria-valuenow="{{ task.progress }}" aria-valuemin="0" aria-valuemax="100">
+                                    {{ task.progress }}%
+                                </div>
+                            </div>
+                            <p class="text-muted">Created: {{ task.created_at }}</p>
+                            <a href="{% url 'task_detail' task.id %}" class="btn btn-info">View Details</a>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12"><p>No tasks found. Create one to get started!</p></div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    // Function to update task progress
+    function startProgressUpdates() {
+        return setInterval(async () => {
+            const taskCards = document.querySelectorAll('.task-card');
+            
+            for (const card of taskCards) {
+                const taskId = card.dataset.taskId;
+                const statusBadge = card.querySelector('.badge');
+                const progressBar = card.querySelector('.progress-bar');
+                
+                if (statusBadge.textContent.trim() === 'COMPLETED' || 
+                    statusBadge.textContent.trim() === 'FAILED') {
+                    continue;
+                }
+                
+                try {
+                    const response = await fetch(`/tasks/${taskId}/status/`);
+                    if (!response.ok) continue;
+                    
+                    const data = await response.json();
+                    
+                    // Update progress bar
+                    progressBar.style.width = `${data.progress}%`;
+                    progressBar.textContent = `${data.progress}%`;
+                    progressBar.setAttribute('aria-valuenow', data.progress);
+                    
+                    // Update status badge if changed
+                    if (statusBadge.textContent.trim() !== data.status) {
+                        statusBadge.textContent = data.status;
+                        
+                        // Remove old classes
+                        statusBadge.classList.remove('bg-secondary', 'bg-primary', 'bg-success', 'bg-danger');
+                        
+                        // Add new class
+                        if (data.status === 'PENDING') statusBadge.classList.add('bg-secondary');
+                        else if (data.status === 'RUNNING') statusBadge.classList.add('bg-primary');
+                        else if (data.status === 'COMPLETED') statusBadge.classList.add('bg-success');
+                        else if (data.status === 'FAILED') statusBadge.classList.add('bg-danger');
+                        else statusBadge.classList.add('bg-secondary');
+                    }
+                } catch (error) {
+                    console.error('Error updating task:', error);
+                }
+            }
+        }, 3000);
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        const updateInterval = startProgressUpdates();
+        
+        window.addEventListener('beforeunload', () => {
+            clearInterval(updateInterval);
+        });
+    });
+</script>
+{% endblock %}

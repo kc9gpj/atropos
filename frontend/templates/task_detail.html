@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <a href="{% url 'index' %}" class="btn btn-secondary mb-3">← Back to Tasks</a>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3>Task: {{ task.name }}</h3>
+        </div>
+        <div class="card-body">
+            <div>
+                <p>{{ task.description|default:"No description" }}</p>
+                
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <p><strong>Status:</strong> 
+                            <span class="badge 
+                                {% if task.status == 'PENDING' %}bg-secondary
+                                {% elif task.status == 'RUNNING' %}bg-primary
+                                {% elif task.status == 'COMPLETED' %}bg-success
+                                {% elif task.status == 'FAILED' %}bg-danger
+                                {% else %}bg-secondary{% endif %}">
+                                {{ task.status }}
+                            </span>
+                        </p>
+                        <p><strong>Task Type:</strong> {{ task.task_type }}</p>
+                        <p><strong>Progress:</strong> {{ task.progress }}%</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Created:</strong> {{ task.created_at }}</p>
+                        <p><strong>Started:</strong> {{ task.started_at|default:"N/A" }}</p>
+                        <p><strong>Completed:</strong> {{ task.completed_at|default:"N/A" }}</p>
+                    </div>
+                </div>
+                
+                <h5 class="mt-4">Parameters:</h5>
+                <pre class="bg-light p-3">{{ task.parameters|pprint }}</pre>
+                
+                {% if task.result %}
+                    <h5 class="mt-4">Result:</h5>
+                    <pre class="bg-light p-3">{{ task.result|pprint }}</pre>
+                {% endif %}
+                
+                {% if task.error %}
+                    <h5 class="mt-4">Error:</h5>
+                    <div class="alert alert-danger">{{ task.error }}</div>
+                {% endif %}
+                
+                <div class="mt-4 text-center">
+                    <div id="task-progress" class="progress mb-3">
+                        <div class="progress-bar" role="progressbar" {% if task.progress %}style="width: {{ task.progress }}%;"{% else %}style="width: 0%;"{% endif %}                                                    aria-valuenow="{{ task.progress }}" aria-valuemin="0" aria-valuemax="100">
+                            {{ task.progress }}%
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const taskId = '{{ task.id }}';
+        const progressBar = document.querySelector('.progress-bar');
+        const statusBadge = document.querySelector('.badge');
+        
+        if (statusBadge.textContent.trim() !== 'COMPLETED' && 
+            statusBadge.textContent.trim() !== 'FAILED') {
+            
+            const updateInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/tasks/${taskId}/status/`);
+                    if (!response.ok) return;
+                    
+                    const data = await response.json();
+                    
+                    // Update progress bar
+                    progressBar.style.width = `${data.progress}%`;
+                    progressBar.textContent = `${data.progress}%`;
+                    progressBar.setAttribute('aria-valuenow', data.progress);
+                    
+                    // If status changed, reload the page
+                    if (statusBadge.textContent.trim() !== data.status) {
+                        location.reload();
+                    }
+                    
+                    // If completed or failed, stop polling
+                    if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+                        clearInterval(updateInterval);
+                    }
+                } catch (error) {
+                    console.error('Error updating task:', error);
+                }
+            }, 3000);
+            
+            window.addEventListener('beforeunload', () => {
+                clearInterval(updateInterval);
+            });
+        }
+    });
+</script>
+{% endblock %}
